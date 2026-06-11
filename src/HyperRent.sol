@@ -46,6 +46,7 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
     error RentNotExpiryYet();
     error RentNotStartedYet();
     error RentExpired();
+    error ZeroAddress();
 
     event RentAuctionCreated(address indexed creator, uint256 rentId);
     event RentAuctionAccepted(address indexed renter, uint256 rentId);
@@ -59,6 +60,7 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
     function createRentAuction(uint256 _hyperPerpId, uint256 _duration, uint256 _price, uint256 _expiry) external {
         // fetch the perp contract
         IHyperPerp hyperPerp = IHyperPerp(IHyperPerpFactory(address(WALLET_FACTORY)).perps(_hyperPerpId));
+        if (address(hyperPerp) == address(0)) revert ZeroAddress();
 
         // check the perp position
         int64 positionSzi = hyperPerp.getPositionSzi();
@@ -122,6 +124,8 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
         // calculate pnl
         uint256 hyperPerpId = rent.hyperPerpId;
         IHyperPerp hyperPerp = IHyperPerp(IHyperPerpFactory(address(WALLET_FACTORY)).perps(hyperPerpId));
+        if (address(hyperPerp) == address(0)) revert ZeroAddress();
+
         int64 endValue = hyperPerp.getAccountValue();
         int64 endRawUsd = hyperPerp.getAccountRawUsd();
 

@@ -38,7 +38,8 @@ abstract contract HyperCoreGateway {
         EncodedTif encodedTif,
         uint128 cloid
     ) internal {
-        bytes memory encodedAction = abi.encode(corePerpId, isBuy, limitPx, sz, reduceOnly, encodedTif, cloid);
+        bytes memory encodedAction =
+            abi.encode(corePerpId, isBuy, limitPx, sz, reduceOnly, uint8(encodedTif) + 1, cloid);
         _execute(encodedAction, 0x01);
     }
 
@@ -59,14 +60,11 @@ abstract contract HyperCoreGateway {
         CORE_WRITER.sendRawAction(data);
     }
 
-    function _accountMarginSummary(uint32 perpDexIndex, address user)
-        internal
-        view
-        returns (AccountMarginSummary memory)
-    {
+    function _accountMarginSummary(address user) internal view returns (AccountMarginSummary memory) {
         bool success;
         bytes memory result;
-        (success, result) = ACCOUNT_MARGIN_SUMMARY_PRECOMPILE_ADDRESS.staticcall(abi.encode(perpDexIndex, user));
+        // perp dex index = 0
+        (success, result) = ACCOUNT_MARGIN_SUMMARY_PRECOMPILE_ADDRESS.staticcall(abi.encode(0, user));
         require(success, "Account margin summary precompile call failed");
         return abi.decode(result, (AccountMarginSummary));
     }
