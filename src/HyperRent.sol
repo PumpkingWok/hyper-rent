@@ -152,12 +152,7 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
         rentFee = _rentFee;
     }
 
-    function onERC721Received(
-    address,
-    address,
-    uint256,
-    bytes calldata
-) external pure returns (bytes4) {
-    return IERC721Receiver.onERC721Received.selector;
-}
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return IERC721Receiver.onERC721Received.selector;
+    }
 }
