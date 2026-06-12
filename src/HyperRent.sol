@@ -21,7 +21,6 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
         uint256 duration;
         uint256 startTime;
         uint256 price;
-        uint256 expiry;
         int64 initialValue;
         int64 initialRawUsd;
     }
@@ -43,10 +42,10 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
     error FeeTooHigh();
     error InvalidRentId();
     error OngoingRent();
-    error RentNotExpiryYet();
+    error OnlyCreator();
     error RentNotStartedYet();
-    error RentExpired();
     error ZeroAddress();
+    error ZeroAmount();
 
     event RentAuctionCreated(address indexed creator, uint256 rentId);
     event RentAuctionAccepted(address indexed renter, uint256 rentId);
@@ -57,7 +56,8 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
         RENT_TOKEN_SA = rentTokenSA_;
     }
 
-    function createRentAuction(uint256 _hyperPerpId, uint256 _duration, uint256 _price, uint256 _expiry) external {
+    function createRentAuction(uint256 _hyperPerpId, uint256 _duration, uint256 _price) external {
+        if (_duration == 0 || _price == 0) revert ZeroAmount();
         // fetch the perp contract
         IHyperPerp hyperPerp = IHyperPerp(IHyperPerpFactory(address(WALLET_FACTORY)).perps(_hyperPerpId));
         if (address(hyperPerp) == address(0)) revert ZeroAddress();
@@ -69,16 +69,32 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
         // transferWallet here
         WALLET_FACTORY.safeTransferFrom(msg.sender, address(this), _hyperPerpId);
 
-        rents[++rentId] = Rent(msg.sender, address(0), _hyperPerpId, _duration, 0, _price, _expiry, 0, 0);
+        rents[++rentId] = Rent(msg.sender, address(0), _hyperPerpId, _duration, 0, _price, 0, 0);
 
         emit RentAuctionCreated(msg.sender, rentId);
     }
 
+    function changeRentPrice(uint256 _rentId, uint256 _price) external {
+        if (_price == 0) revert ZeroAmount();
+
+        Rent storage rent = rents[_rentId];
+        _validateRent(rent.creator, rent.renter);
+
+        rent.price = _price;
+    }
+
+    function changeRentDuration(uint256 _rentId, uint256 _duration) external {
+        if (_duration == 0) revert ZeroAmount();
+
+        Rent storage rent = rents[_rentId];
+        _validateRent(rent.creator, rent.renter);
+
+        rent.duration = _duration;
+    }
+
     function removeRentAuction(uint256 _rentId) external {
         Rent memory rent = rents[_rentId];
-        if (rent.creator == address(0)) revert InvalidRentId();
-        if (rent.renter != address(0)) revert OngoingRent();
-        if (rent.expiry > block.timestamp) revert RentNotExpiryYet();
+        _validateRent(rent.creator, rent.renter);
 
         // transfer back the hyper perp to rent creator
         WALLET_FACTORY.safeTransferFrom(address(this), rent.creator, rent.hyperPerpId);
@@ -88,10 +104,8 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
 
     function acceptRentAuction(uint256 _rentId) external {
         Rent memory rent = rents[_rentId];
-        address creator = rent.creator;
-        if (creator == address(0)) revert InvalidRentId();
+        if (rent.creator == address(0)) revert InvalidRentId();
         if (rent.renter != address(0)) revert OngoingRent();
-        if (rent.expiry < block.timestamp) revert RentExpired();
 
         // transfer price here to charge rent fee
         uint256 price = rent.price;
@@ -100,7 +114,7 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
         uint256 fee = price * rentFee / BASE_FEE;
         feeAccrued += fee;
         // transfer rent price - fee to the creator
-        RENT_TOKEN.safeTransfer(creator, price - fee);
+        RENT_TOKEN.safeTransfer(rent.creator, price - fee);
 
         // fetch the perp contract
         IHyperPerp hyperPerp = IHyperPerp(IHyperPerpFactory(address(WALLET_FACTORY)).perps(rent.hyperPerpId));
@@ -144,6 +158,12 @@ contract HyperRent is Ownable2Step, IERC721Receiver {
         WALLET_FACTORY.safeTransferFrom(address(this), rent.creator, hyperPerpId);
 
         delete rents[_rentId];
+    }
+
+    function _validateRent(address creator, address renter) internal view {
+        if (creator == address(0)) revert InvalidRentId();
+        if (creator != msg.sender) revert OnlyCreator();
+        if (renter != address(0)) revert OngoingRent();
     }
 
     function withdrawFee(address to, uint256 amount) external onlyOwner {
